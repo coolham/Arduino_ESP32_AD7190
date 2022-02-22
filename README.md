@@ -5,6 +5,9 @@ Sampling AD7190 data with Arduino ESP32
 ## Project
 Arduino Project
 
+## Hardware
+
+![image](https://github.com/coolham/ESP32_AD7190/blob/master/images/AD7190-1.jpg)
 
 ## Sample hardware
 
