@@ -7,7 +7,11 @@ Arduino Project
 
 ## Hardware
 
-![image](https://github.com/coolham/ESP32_AD7190/blob/master/images/AD7190-1.jpg)
+* AD7190 module
+![image](https://github.com/coolham/ESP32_AD7190/blob/master/images/AD7190-1-1.jpg)
+
+* ESP32
+![image](https://github.com/coolham/ESP32_AD7190/blob/master/images/AD7190-5-2.jpg)
 
 ## Sample hardware
 
