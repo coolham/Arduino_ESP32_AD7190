@@ -17,9 +17,7 @@ Arduino Project
 
 ## Sample hardware
 
-[K12Diy AD7190 Sample Hareware](https://www.k12diy.com/?p=66)
-
-
+![Contact me](https://github.com/coolham/Arduino_ESP32_AD7190/blob/master/images/wechat-esp32.png)
 
 ##
 
