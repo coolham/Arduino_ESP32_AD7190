@@ -88,17 +88,15 @@
 #define AD7190_CONF_UNIPOLAR    (1 << 3)             // Unipolar/Bipolar Enable.
 #define AD7190_CONF_GAIN(x)     ((x) & 0x7)          // Gain Select.
 
-
-
 /* Configuration Register: AD7190_CONF_CHAN(x) options */
-#define AD7190_CH_AIN1P_AIN2M      (1 << 0) // AIN1(+) - AIN2(-)       
-#define AD7190_CH_AIN3P_AIN4M      (1 << 1) // AIN3(+) - AIN4(-)       
-#define AD7190_CH_TEMP_SENSOR      (1 << 2) // Temperature sensor       
-#define AD7190_CH_AIN2P_AIN2M      (1 << 3) // AIN2(+) - AIN2(-)       
-#define AD7190_CH_AIN1P_AINCOM     (1 << 4) // AIN1(+) - AINCOM       
-#define AD7190_CH_AIN2P_AINCOM     (1 << 5) // AIN2(+) - AINCOM       
-#define AD7190_CH_AIN3P_AINCOM     (1 << 6) // AIN3(+) - AINCOM       
-#define AD7190_CH_AIN4P_AINCOM     (1 << 7) // AIN4(+) - AINCOM
+#define AD7190_CH_AIN1P_AIN2M      0 // AIN1(+) - AIN2(-)       
+#define AD7190_CH_AIN3P_AIN4M      1 // AIN3(+) - AIN4(-)       
+#define AD7190_CH_TEMP_SENSOR      2 // Temperature sensor       
+#define AD7190_CH_AIN2P_AIN2M      3 // AIN2(+) - AIN2(-)       
+#define AD7190_CH_AIN1P_AINCOM     4 // AIN1(+) - AINCOM       
+#define AD7190_CH_AIN2P_AINCOM     5 // AIN2(+) - AINCOM       
+#define AD7190_CH_AIN3P_AINCOM     6 // AIN3(+) - AINCOM       
+#define AD7190_CH_AIN4P_AINCOM     7 // AIN4(+) - AINCOM
 
 /* Configuration Register: AD7190_CONF_GAIN(x) options */
 //                                             ADC Input Range (5 V Reference)
@@ -163,7 +161,7 @@ class AD7190_SPI
     int8_t debugLevel;  // 0: No debug info; 1: Error; 2: Info; 3: Verbose
 
   public:
-    AD7190_SPI(char* name);
+    AD7190_SPI(const char* name);
     ~AD7190_SPI();
     boolean isActive();
     int8_t init(SPIClass * spi, SPISettings setting, uint8_t spi_bus, uint8_t ss, uint8_t miso, uint8_t mosi);
@@ -174,9 +172,9 @@ class AD7190_SPI
     uint32_t singleConversion(void);
     uint32_t continuousReadAvg(unsigned char sampleNumber);
 
-    void adSetup();
+    void weightConfig();
+    void weightLiteConfig();
     uint32_t weightReadAvg(unsigned char sampleNumber);
-    uint32_t adcReadWithSatus();
 
     unsigned char readStatus();
     void waitRdyGoLow(void);
@@ -191,9 +189,6 @@ class AD7190_SPI
     uint32_t getRegisterValue(byte registerAddress, unsigned char bytesNumber);
     uint32_t getDataValue();
     void setRegisterValue(unsigned char registerAddress, uint32_t registerValue, unsigned char bytesNumber);
-
-    void adModeConfig();
-
     void setPower(unsigned char pwrMode);
     void rangeSetup(unsigned char polarity, unsigned char range);
     void calibrate(unsigned char mode, unsigned char channel);

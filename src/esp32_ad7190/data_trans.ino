@@ -118,9 +118,9 @@ void send_to_server(char* ad_data)
     while (wifiClient.available())
     {
       String line = wifiClient.readStringUntil('\n'); //读取数据到换行符
-      //      Serial.print("read data：");
-      //      Serial.println(line);
-      remote_command(line.c_str());
+//      Serial.print("read data：");
+//      Serial.println(line);
+//      remote_command(line.c_str());
       //wifiClient.write(line.c_str()); //将收到的数据回发
     }
   }

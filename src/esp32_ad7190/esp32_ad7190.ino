@@ -6,8 +6,7 @@
 #include "ad7190_spi.h"
 #include "data_trans.h"
 
-#define VER 0.9.0
-
+#define VER 0.9.4
 #if CONFIG_FREERTOS_UNICORE
 #define ARDUINO_RUNNING_CORE 0
 #else
@@ -15,31 +14,39 @@
 #endif
 
 
-// SPI 接口配置
-#define HSPI_ENABLED   // 第一路SPI
-//#define VSPI_ENABLED   // 第二路SPI
+// SPI Interface
+#define HSPI_ENABLED   // HSPI
+//#define VSPI_ENABLED   // VSPI
 
-// AD7190 滤波器参数
+// AD7190 filter param
 #define HSPI_FILTER_VALUE   AD7190_FILTER_RATE_32
 #define VSPI_FILTER_VALUE   AD7190_FILTER_RATE_32
 
-// 采样延时ms
-#define SAMPLE_DELAY_INTERVAL     1
+// AD7190 gain
+#define HSPI_GAIN_VALUE     AD7190_CONF_GAIN_128
+#define VSPI_GAIN_VALUE     AD7190_CONF_GAIN_128
+
+// sample delay (ms)
+#define SAMPLE_HSPI_DELAY_INTERVAL     50
+#define SAMPLE_VSPI_DELAY_INTERVAL     50
+
+// calibration
+//#define CALIBRATION_ENABLED
+
 
 // SPI Mode
 #define AD7190_SPI_MODE   SPI_MODE3
 
 
-
-// 打开SEND_DATA_ENABLED， 向服务器发送数据
-#define SEND_DATA_ENABLED         1
+// send data to server
+//#define SEND_DATA_ENABLED         1
 
 
 #define MAX_QUEUE_LENGTH          30
 #define MAX_MESSAGE_BYTES         64
 
 #define DEUBG_AD_DATA   1
-//#define DEBUG_VERBOSE   1
+#define DEBUG_VERBOSE   1
 
 #ifdef HSPI_ENABLED
 boolean hspiEnabled = 1;
@@ -75,7 +82,7 @@ void task_hspi_data( void *pvParameters );
 void task_vspi_data( void *pvParameters );
 
 //-------------------------------------------------------------------
-// 下面4个校准值，需要用校准程序获得 test_ad7190.ino
+// below params need calibration
 uint32_t hspiWeightZero = 539240;
 uint32_t hspiWeightProportion = 41510;
 uint32_t vspiWeightZero = 539240;
@@ -84,12 +91,11 @@ uint32_t vspiWeightProportion = 41510;
 boolean calibrateMode = false;
 Preferences prefs;
 //-------------------------------------------------------------------
-// WIFI SSID/Password的定义在arduino_secrets.h文件中
 WiFiClient wifiClient;
 static uint8_t wifi_index = 0;
 
-const IPAddress serverIP(192, 168, 3, 37); //服务器地址
-uint16_t serverPort = 8000;                //服务器端口号
+const IPAddress serverIP(192, 168, 3, 37); // Server IP
+uint16_t serverPort = 8000;                // Server Port
 
 int32_t socket_error_num = 0;
 
@@ -112,9 +118,9 @@ unsigned long last_ts = 0;
 
 uint32_t sampleCount = 0;
 uint32_t errorHspiCount = 0;
-uint32_t errorHspiConf = 0;
+uint32_t confHspiCount = 0;
 uint32_t errorVspiCount = 0;
-uint32_t errorVspiConf = 0;
+uint32_t confVspiCount = 0;
 
 void spi_init()
 {
@@ -263,18 +269,24 @@ int8_t ad7190_hspi_init(int retryTime)
 
   //delay(30*1000);
   ad7190_hspi->setFilterRate(HSPI_FILTER_VALUE);  // 设置滤波器字, 具体定义见ad7190_spi.h
+  ad7190_hspi->setGainValue(HSPI_GAIN_VALUE);
   ad7190_hspi->weightConfig();
   delay(2);
   ad7190_hspi_lite_config();
   errorHspiCount = 0;
+  confHspiCount = 0;
   return 0;
 }
 // 配置AD7190 HSPI数据采集参数
 void ad7190_hspi_lite_config()
 {
+#ifdef DEBUG_VERBOSE
   Serial.println("ad7190_hspi_lite_config");
+#endif
   ad7190_hspi->setFilterRate(HSPI_FILTER_VALUE);
+  ad7190_hspi->setGainValue(HSPI_GAIN_VALUE);
   ad7190_hspi->weightConfig();
+  ++confHspiCount;
 }
 
 int8_t ad7190_vspi_init(int retryTime)
@@ -306,18 +318,23 @@ int8_t ad7190_vspi_init(int retryTime)
   Serial.println(t);
 
   ad7190_vspi->setFilterRate(VSPI_FILTER_VALUE);  // 设置滤波器字, 具体定义见ad7190_spi.h
+  ad7190_vspi->setGainValue(VSPI_GAIN_VALUE);
   ad7190_vspi->weightConfig();
   delay(2);
   errorVspiCount = 0;
+  confVspiCount = 0;
   return 0;
 }
 // 配置AD7190 VSPI数据采集参数
 void ad7190_vspi_lite_config()
 {
+#ifdef DEBUG_VERBOSE
   Serial.println("ad7190_vspi_lite_config");
+#endif
   ad7190_vspi->setFilterRate(VSPI_FILTER_VALUE);
+  ad7190_vspi->setGainValue(VSPI_GAIN_VALUE);
   ad7190_vspi->weightLiteConfig();
-
+  ++confVspiCount;
 }
 
 void task_init()
@@ -329,7 +346,7 @@ void task_init()
 
   xTaskCreatePinnedToCore(
     task_process_data,
-    "task_process_data",   // 任务名
+    "task_process_data",   
     2048,  // This stack size can be checked & adjusted by reading the Stack Highwater
     NULL,
     2,  // 任务优先级, with 3 (configMAX_PRIORITIES - 1) 是最高的，0是最低的.
@@ -338,7 +355,7 @@ void task_init()
 
   xTaskCreatePinnedToCore(
     task_hspi_data,
-    "task_hspi_data",   // 任务名
+    "task_hspi_data",   
     3072,  // This stack size can be checked & adjusted by reading the Stack Highwater
     NULL,
     2,  // 任务优先级, with 3 (configMAX_PRIORITIES - 1) 是最高的，0是最低的.
@@ -347,7 +364,7 @@ void task_init()
 
   xTaskCreatePinnedToCore(
     task_vspi_data,
-    "task_vspi_data",   // 任务名
+    "task_vspi_data",   
     3072,  // This stack size can be checked & adjusted by reading the Stack Highwater
     NULL,
     2,  // 任务优先级, with 3 (configMAX_PRIORITIES - 1) 是最高的，0是最低的.
@@ -393,7 +410,7 @@ void put_message(AD7190_SPI * ad7190_ptr, float w)
 {
   char ad_data[MAX_MESSAGE_BYTES];
   memset(ad_data, 0, sizeof(ad_data));
-  sprintf(ad_data, "{\"%s\", %f, %d}\n", ad7190_ptr->getDeviceName(), w, millis());
+  sprintf(ad_data, "{\"%s\", %.2f, %d}\n", ad7190_ptr->getDeviceName(), w, millis());
   xQueueSend(spiQueue, &ad_data,  ( TickType_t ) 100);
 
 }
@@ -403,13 +420,21 @@ boolean check_spi_error()
   if (errorHspiCount > 100) {
     Serial.println("Error: errorHspiCount >100, init ad7190");
     ad7190_hspi_init(0);
-    errorHspiCount = 0;
+    return false;
+  }
+  if (confHspiCount > 5) {
+    Serial.println("Error: confHspiCount , init ad7190");
+    ad7190_hspi_init(0);
     return false;
   }
   if (errorVspiCount > 100) {
     Serial.println("Error: errorVspiCount >100, init ad7190");
     ad7190_vspi_init(0);
-    errorVspiCount = 0;
+    return false;
+  }
+  if (confVspiCount > 5) {
+    Serial.println("Error: confVspiCount , init ad7190");
+    ad7190_vspi_init(0);
     return false;
   }
   return true;
@@ -452,8 +477,8 @@ boolean check_ad_status(AD7190_SPI * ad7190_ptr, uint8_t adStatus)
       Serial.println(", call init");
 #endif
       ++errorVspiCount;
-      //ad7190_vspi_init(1);
-      ad7190_vspi_lite_config();
+      ad7190_vspi_init(1);
+      //ad7190_vspi_lite_config();
       errorVspiCount = 0;
       return false;
     } else if ((adStatus & 0x80) == 0x80) {
@@ -474,44 +499,70 @@ boolean check_ad_weight_count(AD7190_SPI * ad7190_ptr, uint32_t weight_count)
 {
   if (ad7190_ptr->getSpiBus() == HSPI) {
     if (weight_count == 0) {
-      //++errorHspiCount;
 #if DEBUG_VERBOSE
-      Serial.println("hspi weight_count is 0, lite config");
+      Serial.print("hspi weight_count is 0, lite config, ");
+      Serial.print(errorHspiCount);
+      Serial.print(", ");
+      Serial.println(confHspiCount);
 #endif
       ad7190_hspi_lite_config();
-      errorHspiCount = 0;
+      ++errorHspiCount;
       delay(1);
       return false;
     }
+    if (weight_count == 0xFFFFF) {
+#if DEBUG_VERBOSE
+      Serial.println("hspi weight_count is 0xFFFFF, init config");
+#endif
+      ad7190_hspi_init(0);
+      delay(1);
+      return false;
+    }
+
+
     if (weight_count < 0x70000 || weight_count > 0xF0000) {
 #if DEBUG_VERBOSE
       Serial.print("hspi weight_count is overflow: 0x");
       Serial.println(weight_count, HEX);
 #endif
       ad7190_hspi_lite_config();
-      ++errorHspiConf;
+      ++errorHspiCount;
       return false;
     }
+
   }
 
   if (ad7190_ptr->getSpiBus() == VSPI) {
     if (weight_count == 0) {
-      //++errorVspiCount;
 #if DEBUG_VERBOSE
-      Serial.println("vspi weight_count is 0, lite config");
+      Serial.print("vspi weight_count is 0, lite config, ");
+      Serial.print(errorVspiCount);
+      Serial.print(", ");
+      Serial.println(confVspiCount);
 #endif
       ad7190_vspi_lite_config();
-      errorVspiCount = 0;
+      ++errorVspiCount;
       delay(1);
       return false;
     }
+
+    if (weight_count == 0xFFFFF) {
+#if DEBUG_VERBOSE
+      Serial.println("vspi weight_count is 0xFFFFF, init config");
+#endif
+      ad7190_vspi_init(0);
+      delay(1);
+      return false;
+    }
+
+
     if (weight_count < 0x70000 || weight_count > 0xF0000) {
 #if DEBUG_VERBOSE
       Serial.print("vspi weight_count is overflow: 0x");
       Serial.println(weight_count, HEX);
 #endif
       ad7190_vspi_lite_config();
-      ++errorVspiConf;
+      ++errorVspiCount;
       return false;
     }
   }
@@ -565,13 +616,16 @@ boolean spi_ad7190_data(AD7190_SPI * ad7190_ptr)
   if (ad7190_ptr->getSpiBus() == HSPI) {
     data_temp = weight_count - hspiWeightZero;
     weight = data_temp * 1000.0 / hspiWeightProportion;
+    confHspiCount = 0;
   } else if (ad7190_ptr->getSpiBus() == VSPI) {
     data_temp = weight_count - vspiWeightZero;
     weight = data_temp * 1000.0 / vspiWeightProportion;
+    confVspiCount = 0;
   }
 
+
 #if DEUBG_AD_DATA
-  if (sampleCount % 500 == 0) {
+  if (sampleCount % 20 == 0) {
     Serial.print(ad7190_ptr->getDeviceName());
     Serial.print(": ts: ");
     Serial.print(millis());
@@ -616,6 +670,10 @@ void task_hspi_data( void *pvParameters )
   char data[MAX_MESSAGE_BYTES];
 
   while (1) {
+    if (calibrateMode) {
+      delay(10);
+      continue;
+    }
     if (hspiEnabled && spi_ad7190_data(ad7190_hspi)) {
       ++sampleCount;
       if (sampleCount % 1000 == 0) {
@@ -623,7 +681,7 @@ void task_hspi_data( void *pvParameters )
         Serial.println(sampleCount);
       }
     }
-    delay(SAMPLE_DELAY_INTERVAL);
+    delay(SAMPLE_HSPI_DELAY_INTERVAL);
   }
 }
 
@@ -633,6 +691,10 @@ void task_vspi_data( void *pvParameters )
   char data[MAX_MESSAGE_BYTES];
 
   while (1) {
+    if (calibrateMode) {
+      delay(10);
+      continue;
+    }
     if (vspiEnabled && spi_ad7190_data(ad7190_vspi)) {
       ++sampleCount;
       if (sampleCount % 1000 == 0) {
@@ -640,7 +702,7 @@ void task_vspi_data( void *pvParameters )
         Serial.println(sampleCount);
       }
     }
-    delay(SAMPLE_DELAY_INTERVAL);
+    delay(SAMPLE_VSPI_DELAY_INTERVAL);
   }
 }
 /******************************************************************************/
@@ -653,32 +715,15 @@ void loop() {
   }
 
   unsigned long ts = millis();
-  if ((ts - last_ts) >= SAMPLE_DELAY_INTERVAL) {
+  if ((ts - last_ts) >= 10) {
     last_ts = ts;
 
   }
 
   // Serial interactive command
+#ifdef CALIBRATION_ENABLED
   process_cmd();
+#endif
+
   delay(1);
-}
-
-void process_cmd()
-{
-
-  while (Serial.available() > 0) {
-    char c = Serial.read();
-    switch (c) {
-      case 'i':
-        Serial.println("Set Instructment reinitializing...");
-        ad7190_hspi_init(1);
-        delay(1);
-        break;
-      case 'j':
-        Serial.println("Set lite config...");
-        ad7190_hspi_lite_config();
-        delay(1);
-        break;
-    }
-  }
 }
