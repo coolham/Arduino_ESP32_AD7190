@@ -17,7 +17,6 @@ Arduino Project
 
 ## Sample hardware
 
-![Contact me](https://github.com/coolham/Arduino_ESP32_AD7190/blob/master/images/wechat-esp32.png)
 
 ##
 
